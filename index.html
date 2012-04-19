@@ -129,8 +129,17 @@
 
 
     var rockTexture;
+    var playerTexture;
 
     function initTexture() {
+        playerTexture = gl.createTexture();
+        playerTexture.image = new Image();
+        playerTexture.image.onload = function () {
+            handleLoadedTexture(playerTexture)
+        }
+
+        playerTexture.image.src = "MarioSprites.png";
+
         rockTexture = gl.createTexture();
         rockTexture.image = new Image();
         rockTexture.image.onload = function () {
@@ -182,9 +191,52 @@
         currentlyPressedKeys[event.keyCode] = false;
     }
 
+    var camera;
+    var player;
 
+//GLOBAL CONSTANTS
+    var START_POS =[0,0,0];
+    var PLAYER_SPEED = 0.002;
+    var PLAYER_HEIGHT = 0.75;
+    var CAMERA_DISTANCE = 4;
+    var CAMERA_PITCH = -30;
+//END GLOBAL
+
+    function initObjects(){
+
+	player = new Character();
+
+	player.height = PLAYER_HEIGHT;
+	player.pos = START_POS;
+	player.speed = PLAYER_SPEED;
+	player.vertexPositionBuffer = gl.createBuffer();
+
+	camera = new Camera();
+
+	camera.pitch = CAMERA_PITCH;
+	camera.distance = CAMERA_DISTANCE;
+	camera.pos = player.pos;
+    }
+
+
+    function Character(){
+        this.speed = PLAYER_SPEED;
+	this.pos = vec3;
+	this.pos = [0,0,0];
+	this.vel = vec3;
+	this.vel = [0,0,0];
+    }
+
+    Character.prototype.draw = function() {
+	mvPushMatrix();
+	mat4.translate(mvMatrix,[0,player.height/2,0]);
+	mat4.rotate(mvMatrix,degToRad(-camera.pitch),[1,0,0]);
+	mvPopMatrix();
+    }
+	
 
     function Camera(){
+	this.distance = 0;
 	this.yaw = 0;
 	this.pitch = 0;
 	this.roll = 0;
@@ -193,42 +245,29 @@
 	this.vel = vec3;
 	this.vel = [0,0,0];
     }
-    //camera.pitch = -30;
-    var skyView = new Camera();
-    skyView.pitch = -30;
-
-    var player;
-    
-    var pitch = -30;
-
-    var xVelocity = 0;
-    var zVelocity = 0;
-
-    var xPos = 0;
-    var yPos = 0.4;
-    var zPos = 0;
 
     var speed = 0;
 
     function handleKeys() {
+	
         if (currentlyPressedKeys[37] || currentlyPressedKeys[65]) {
             // Left cursor key or A
-            xVelocity=-0.003;
+            player.vel[0]=-player.speed;
         } else if (currentlyPressedKeys[39] || currentlyPressedKeys[68]) {
             // Right cursor key or D
-            xVelocity=0.003;
+            player.vel[0]=player.speed;
         } else {
-            xVelocity=0;
+            player.vel[0]=0;
         }
 
         if (currentlyPressedKeys[38] || currentlyPressedKeys[87]) {
             // Up cursor key or W
-            zVelocity=-0.003;
+            player.vel[2]=-player.speed;
         } else if (currentlyPressedKeys[40] || currentlyPressedKeys[83]) {
             // Down cursor key
-            zVelocity=0.003;
+            player.vel[2]=player.speed;
         } else {
-            zVelocity=0;
+            player.vel[2]=0;
         }
 
     }
@@ -236,6 +275,38 @@
 
     var worldVertexPositionBuffer = null;
     var worldVertexTextureCoordBuffer = null;
+
+    var playerVertextPositionBuffer = null;
+    var playerVertextTextureCoordBuffer =null;
+
+    function loadPlayer(){
+	var vertexCount=0;
+	var vertexPositions = [
+	    1.0, 1.0, 0.0, 
+	   -1.0, 1.0, 0.0,
+	    1.0,-1.0, 0.0,
+	   -1.0,-1.0, 0.0,
+	];
+	var vertexTextureCoords = [
+	    1.0, 1.0,
+            0.0, 1.0,
+            1.0, 0.0,
+            0.0, 0.0];
+	vertexCount = 4;
+	
+        playerVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositions), gl.STATIC_DRAW);
+        playerVertexPositionBuffer.itemSize = 3;
+        playerVertexPositionBuffer.numItems = vertexCount;
+
+        playerVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexTextureCoords), gl.STATIC_DRAW);
+        playerVertexTextureCoordBuffer.itemSize = 2;
+        playerVertexTextureCoordBuffer.numItems = vertexCount;
+
+    }
 
     function handleLoadedWorld(data) {
         var lines = data.split("\n");
@@ -269,8 +340,6 @@
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexTextureCoords), gl.STATIC_DRAW);
         worldVertexTextureCoordBuffer.itemSize = 2;
         worldVertexTextureCoordBuffer.numItems = vertexCount;
-
-        document.getElementById("loadingtext").textContent = "";
     }
 
 
@@ -290,7 +359,6 @@
     function drawScene() {
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
         if (worldVertexTextureCoordBuffer == null || worldVertexPositionBuffer == null) {
             return;
         }
@@ -298,13 +366,48 @@
         mat4.perspective(55, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
 
         mat4.identity(mvMatrix);
+	//Camera is pitched a distance behind the player's head
 
-        mat4.translate(mvMatrix, [-skyView.pos[0], -yPos, -zPos]);
-        mat4.rotate(mvMatrix, degToRad(-skyView.pitch), [1, 0, 0]);
-       // mat4.rotate(mvMatrix, degToRad(-yaw), [0, 1, 0]);
+        mat4.translate(mvMatrix, [0, 0, -camera.distance]);
+        mat4.rotate(mvMatrix, degToRad(-camera.pitch), [1, 0, 0]);
+        mat4.translate(mvMatrix, [0, -player.height/2, 0]);
+
+	//draw character
+	player.draw();
+
+
+	mvPushMatrix();
+
+	mat4.translate(mvMatrix,[0,player.height/2,0]);
+	mat4.scale(mvMatrix,[player.height/2,player.height/2,player.height/2]);
+	mat4.rotate(mvMatrix,degToRad(camera.pitch),[1,0,0]);
 
         gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, playerTexture);
+
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, playerVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, playerVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, playerVertexPositionBuffer.numItems);
+
+	mvPopMatrix();
+
+//===================================================================
+
+	//the player is a ways away from the origin
+        mat4.translate(mvMatrix, [-player.pos[0], -player.pos[1], -player.pos[2]]);
+
+	//draw background
+
+        gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, rockTexture);
+
         gl.uniform1i(shaderProgram.samplerUniform, 0);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, worldVertexTextureCoordBuffer);
@@ -315,6 +418,9 @@
 
         setMatrixUniforms();
         gl.drawArrays(gl.TRIANGLES, 0, worldVertexPositionBuffer.numItems);
+
+//===================================================================
+
     }
 
 
@@ -324,14 +430,12 @@
         var timeNow = new Date().getTime();
         if (lastTime != 0) {
             var elapsed = timeNow - lastTime;
-            if (xVelocity != 0) {
-                xPos += xVelocity * elapsed;
-		skyView.pos[0] += xVelocity * elapsed;
+            if (player.vel[0] != 0) {
+		player.pos[0] += player.vel[0] * elapsed;
             }
-            if (zVelocity != 0) {
-                zPos += zVelocity * elapsed;
+            if (player.vel[2] != 0) {
+		player.pos[2] += player.vel[2] * elapsed;
             }
-            yPos = 0.4
         }
         lastTime = timeNow;
     }
@@ -351,7 +455,9 @@
         initGL(canvas);
         initShaders();
         initTexture();
+	initObjects();
         loadWorld();
+	loadPlayer();
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
