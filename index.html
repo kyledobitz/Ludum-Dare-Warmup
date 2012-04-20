@@ -15,7 +15,8 @@
     uniform sampler2D uSampler;
 
     void main(void) {
-        gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+        vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+	gl_FragColor = textureColor;//vec4(textureColor.rgb,textureColor.a);
     }
 </script>
 
@@ -114,6 +115,8 @@
         shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
         shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
         shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
+        gl.enable(gl.BLEND);
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
 
 
@@ -129,16 +132,16 @@
 
 
     var rockTexture;
-    var playerTexture;
 
     function initTexture() {
-        playerTexture = gl.createTexture();
+        var playerTexture = gl.createTexture();
         playerTexture.image = new Image();
         playerTexture.image.onload = function () {
             handleLoadedTexture(playerTexture)
         }
 
-        playerTexture.image.src = "MarioSprites.png";
+        playerTexture.image.src = "MarioSprite.png";
+	player.texture = playerTexture;
 
         rockTexture = gl.createTexture();
         rockTexture.image = new Image();
@@ -146,7 +149,7 @@
             handleLoadedTexture(rockTexture)
         }
 
-        rockTexture.image.src = "Granite.png";
+        rockTexture.image.src = "Granite2.png";
     }
 
 
@@ -210,6 +213,7 @@
 	player.pos = START_POS;
 	player.speed = PLAYER_SPEED;
 	player.vertexPositionBuffer = gl.createBuffer();
+	player.texture = null;
 
 	camera = new Camera();
 
@@ -228,10 +232,35 @@
     }
 
     Character.prototype.draw = function() {
+
 	mvPushMatrix();
+
+        mat4.translate(mvMatrix, player.pos);
 	mat4.translate(mvMatrix,[0,player.height/2,0]);
-	mat4.rotate(mvMatrix,degToRad(-camera.pitch),[1,0,0]);
+	mat4.scale(mvMatrix,[player.height/2,player.height/2,player.height/2]);
+	draw2dTexture(player.texture);
+	mat4.rotate(mvMatrix,degToRad(camera.pitch),[1,0,0]);
+
 	mvPopMatrix();
+
+    }
+
+    function draw2dTexture(elementTexture){
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, elementTexture);
+
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, playerVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, playerVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, playerVertexPositionBuffer.numItems);
+
     }
 	
 
@@ -372,40 +401,14 @@
         mat4.rotate(mvMatrix, degToRad(-camera.pitch), [1, 0, 0]);
         mat4.translate(mvMatrix, [0, -player.height/2, 0]);
 
-	//draw character
-	player.draw();
-
-
-	mvPushMatrix();
-
-	mat4.translate(mvMatrix,[0,player.height/2,0]);
-	mat4.scale(mvMatrix,[player.height/2,player.height/2,player.height/2]);
-	mat4.rotate(mvMatrix,degToRad(camera.pitch),[1,0,0]);
-
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, playerTexture);
-
-        gl.uniform1i(shaderProgram.samplerUniform, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
-        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, playerVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
-        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, playerVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-        setMatrixUniforms();
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, playerVertexPositionBuffer.numItems);
-
-	mvPopMatrix();
-
-//===================================================================
-
 	//the player is a ways away from the origin
         mat4.translate(mvMatrix, [-player.pos[0], -player.pos[1], -player.pos[2]]);
 
+//===================================================================
+
 	//draw background
 
-        gl.activeTexture(gl.TEXTURE1);
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, rockTexture);
 
         gl.uniform1i(shaderProgram.samplerUniform, 0);
@@ -420,9 +423,12 @@
         gl.drawArrays(gl.TRIANGLES, 0, worldVertexPositionBuffer.numItems);
 
 //===================================================================
+ 
+	//draw character
+	player.draw();
+
 
     }
-
 
     var lastTime = 0;
 
@@ -453,11 +459,12 @@
     function webGLStart() {
         var canvas = document.getElementById("warmup-canvas");
         initGL(canvas);
+
         initShaders();
-        initTexture();
-	initObjects();
-        loadWorld();
 	loadPlayer();
+	initObjects();
+        initTexture();
+        loadWorld();
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
