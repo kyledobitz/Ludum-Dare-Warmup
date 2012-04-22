@@ -1,11 +1,12 @@
 <html>
 
 <head>
-<title>Ludum Dare Warm-up</title>
+<title>Ludum Dare 22</title>
 <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
 
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
 <script type="text/javascript" src="webgl-utils.js"></script>
+<script type="text/javascript" src="textureScheme.js"></script>
 
 <script id="shader-fs" type="x-shader/x-fragment">
     precision mediump float;
@@ -48,7 +49,6 @@
         } catch (e) {
         }
         if (!gl) {
-            alert("Could not initialise WebGL, sorry :-(");
         }
     }
 
@@ -121,6 +121,7 @@
 
 
     function handleLoadedTexture(texture) {
+	try{
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
@@ -128,12 +129,36 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP);
 	gl.generateMipmap(gl.TEXTURE_2D);
         gl.bindTexture(gl.TEXTURE_2D, null);
+	}catch(e){
+	    alert("exception in Handled:"+texture.image.src);
+	}
+	
     }
 
 
     var rockTexture;
+    var textureList = new Array();
+
+    var texturesLoaded = 0;
+
+    function loadTexture(src, callback) {
+        var texture = gl.createTexture();
+        texture.image = new Image();
+	texture.image.onload = function(){
+	    handleLoadedTexture(texture);
+	    textureList.push(texture);
+        }
+        texture.image.src = src;
+    }
+
+    function initTextures(){
+	for(i=0; i<textureFileList.length;i++){
+            loadTexture(textureFileList[i],0);
+        }
+    }
 
     function initTexture() {
+
         var playerTexture = gl.createTexture();
         playerTexture.image = new Image();
         playerTexture.image.onload = function () {
@@ -143,15 +168,7 @@
         playerTexture.image.src = "MarioSprite.png";
 	player.texture = playerTexture;
 
-        rockTexture = gl.createTexture();
-        rockTexture.image = new Image();
-        rockTexture.image.onload = function () {
-            handleLoadedTexture(rockTexture)
-        }
-
-        rockTexture.image.src = "Granite2.png";
     }
-
 
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
@@ -223,6 +240,15 @@
     }
 
 
+    function Drawable(){
+	this.texture = null;
+        this.pos = [0,0,0];
+	this.vertexPositionBuffer = gl.createBuffer();
+	this.vertexTextureCoordBuffer = gl.createBuffer();
+	this.drawtype = "";
+	this.numItems = 0;
+    }
+
     function Character(){
         this.speed = PLAYER_SPEED;
 	this.pos = vec3;
@@ -238,28 +264,28 @@
         mat4.translate(mvMatrix, player.pos);
 	mat4.translate(mvMatrix,[0,player.height/2,0]);
 	mat4.scale(mvMatrix,[player.height/2,player.height/2,player.height/2]);
-	draw2dTexture(player.texture);
+	drawTriangleStrip(player.texture,playerVertexPositionBuffer,playerVertexTextureCoordBuffer, playerVertexPositionBuffer.numItems);
 	mat4.rotate(mvMatrix,degToRad(camera.pitch),[1,0,0]);
 
 	mvPopMatrix();
 
     }
-
-    function draw2dTexture(elementTexture){
+	
+    function drawTriangleStrip(myTexture, myVertexPositionBuffer, myTextureCoordBuffer, numItems){
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, elementTexture);
+        gl.bindTexture(gl.TEXTURE_2D, myTexture);
 
         gl.uniform1i(shaderProgram.samplerUniform, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
-        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, playerVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, myTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
-        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, playerVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, myVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
 
         setMatrixUniforms();
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, playerVertexPositionBuffer.numItems);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, numItems);
 
     }
 	
@@ -301,15 +327,88 @@
 
     }
 
-
     var worldVertexPositionBuffer = null;
     var worldVertexTextureCoordBuffer = null;
 
     var playerVertextPositionBuffer = null;
     var playerVertextTextureCoordBuffer =null;
 
+    var blockWallVertexPositionBuffer = null;
+    var blockWallVertextTextureCoordBuffer =null;
+
+    var blockCeilingVertexPositionBuffer = null;
+    var blockCeilingVertextTextureCoordBuffer =null;
+
+    function Block(thisPos, thisCeilingTexture, thisWallTexture){
+	this.pos = thisPos;
+	this.ceilingTexture = thisCeilingTexture;
+	this.wallTexture = thisWallTexture;
+    }
+    Block.prototype.draw = function() {
+	mvPushMatrix();
+	
+        mat4.translate(mvMatrix, this.pos);
+
+	drawTriangleStrip(this.ceilingTexture, blockCeilingVertexPositionBuffer, blockCeilingVertexTextureCoordBuffer, 4);
+	drawTriangleStrip(this.wallTexture, blockWallVertexPositionBuffer, blockWallVertexTextureCoordBuffer, 10);
+
+	mvPopMatrix();
+    }
+
+    function loadBlockModel(){
+	var wallVertexCount=10;
+	var wallVertexPositions = [
+	0,0,0,0,1,0,1,0,0,1,1,0,1,0,1,1,1,1,0,0,1,0,1,1,0,0,0,0,1,0
+	];
+
+	var wallVertexTextureCoords = [
+	    0.0, 1.0,
+            1.0, 1.0,
+            0.0, 0.0,
+            1.0, 0.0,
+	    0.0, 1.0,
+            1.0, 1.0,
+            0.0, 0.0,
+            1.0, 0.0,
+	    0.0, 1.0,
+            1.0, 1.0
+	];
+	
+	//sets the global buffers and creates them on graphics card
+
+        blockWallVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, blockWallVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(wallVertexPositions), gl.STATIC_DRAW);
+
+        blockWallVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, blockWallVertexTextureCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(wallVertexTextureCoords), gl.STATIC_DRAW);
+
+	var ceilingVertexCount=4;
+	var ceilingVertexPositions = [
+	0,1,0,1,1,0,0,1,1,1,1,1
+	];
+
+	var ceilingVertexTextureCoords = [
+	    0.0, 1.0,
+            1.0, 1.0,
+            0.0, 0.0,
+	    1.0, 0.0,
+	];
+	
+	//sets the global buffers and creates them on graphics card
+
+        blockCeilingVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, blockCeilingVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ceilingVertexPositions), gl.STATIC_DRAW);
+
+        blockCeilingVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, blockCeilingVertexTextureCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ceilingVertexTextureCoords), gl.STATIC_DRAW);
+    }
+   
     function loadPlayer(){
-	var vertexCount=0;
+	var vertexCount=4;
 	var vertexPositions = [
 	    1.0, 1.0, 0.0, 
 	   -1.0, 1.0, 0.0,
@@ -321,7 +420,6 @@
             0.0, 1.0,
             1.0, 0.0,
             0.0, 0.0];
-	vertexCount = 4;
 	
         playerVertexPositionBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
@@ -337,60 +435,9 @@
 
     }
 
-    function handleLoadedWorld(data) {
-        var lines = data.split("\n");
-        var vertexCount = 0;
-        var vertexPositions = [];
-        var vertexTextureCoords = [];
-        for (var i in lines) {
-            var vals = lines[i].replace(/^\s+/, "").split(/\s+/);
-            if (vals.length == 5 && vals[0] != "//") {
-                // It is a line describing a vertex; get X, Y and Z first
-                vertexPositions.push(parseFloat(vals[0]));
-                vertexPositions.push(parseFloat(vals[1]));
-                vertexPositions.push(parseFloat(vals[2]));
-
-                // And then the texture coords
-                vertexTextureCoords.push(parseFloat(vals[3]));
-                vertexTextureCoords.push(parseFloat(vals[4]));
-
-                vertexCount += 1;
-            }
-        }
-
-        worldVertexPositionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, worldVertexPositionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositions), gl.STATIC_DRAW);
-        worldVertexPositionBuffer.itemSize = 3;
-        worldVertexPositionBuffer.numItems = vertexCount;
-
-        worldVertexTextureCoordBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, worldVertexTextureCoordBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexTextureCoords), gl.STATIC_DRAW);
-        worldVertexTextureCoordBuffer.itemSize = 2;
-        worldVertexTextureCoordBuffer.numItems = vertexCount;
-    }
-
-
-    function loadWorld() {
-        var request = new XMLHttpRequest();
-        request.open("GET", "world.txt");
-        request.onreadystatechange = function () {
-            if (request.readyState == 4) {
-                handleLoadedWorld(request.responseText);
-            }
-        }
-        request.send();
-    }
-
-
-
     function drawScene() {
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        if (worldVertexTextureCoordBuffer == null || worldVertexPositionBuffer == null) {
-            return;
-        }
 
         mat4.perspective(55, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
 
@@ -403,29 +450,14 @@
 
 	//the player is a ways away from the origin
         mat4.translate(mvMatrix, [-player.pos[0], -player.pos[1], -player.pos[2]]);
-
-//===================================================================
-
-	//draw background
-
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, rockTexture);
-
         gl.uniform1i(shaderProgram.samplerUniform, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, worldVertexTextureCoordBuffer);
-        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, worldVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	//draw Blocks
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, worldVertexPositionBuffer);
-        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, worldVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
-
-        setMatrixUniforms();
-        gl.drawArrays(gl.TRIANGLES, 0, worldVertexPositionBuffer.numItems);
-
-//===================================================================
- 
-	//draw character
-	player.draw();
+	for(i =0; i<drawables.length; i++){
+	    var thingToDraw = drawables[i];
+	    thingToDraw.draw();
+        }
 
 
     }
@@ -454,18 +486,93 @@
         requestAnimFrame(tick);
     }
 
+    var drawables = new Array();
 
+    var pixel = new Array();
+
+    var currentLevel = new Array();;
+
+    function readBMP(){
+	var viewWidth = levelLoader.viewportWidth;
+	var viewHeight = levelLoader.viewportHeight;
+	for(i=0;i<viewWidth;i++){
+	    currentLevel[i] = new Array();
+	    pixel[i] = new Array();
+	    var imgData = levelLoader.getImageData(0, i, viewHeight, viewWidth);
+	    for(j=0;j<viewHeight;j++){
+		var red = imgData.data[j*4];
+		var green = imgData.data[j*4+1];
+		var blue = imgData.data[j*4+2];
+		var alpha = imgData.data[j*4+3];
+		pixel[i][j] = red * 0x10000 + green * 0x100 + blue;
+		if(red!=0xff){
+		    currentLevel[i][j] = 1;
+		}
+		else{
+		    currentLevel[i][j] = 0;
+		}
+	    }
+    	}
+    }
+
+    function loadLevel(){
+	levelBMP = new Image();
+	levelBMP.onload = function () {
+	    levelLoader.drawImage(levelBMP, 0, 0);
+	    readBMP();
+    	    for(i=0; i<pixel.length;i++){
+	        for(j=0; j<pixel[i].length; j++){
+		    var tempCeiling = textureList[1];
+		    var tempWalls = textureList[0];
+		    for(k=0; k<textureSchemes.length; k++){
+			thisScheme = textureSchemes[k];
+			rgb = pixel[i][j];
+			if( thisScheme.color == rgb){
+			    tempCeiling=textureList[thisScheme.ceilingTexture]
+			    tempWalls=textureList[thisScheme.wallTexture]
+			}
+		    }
+	    	    var blockPosition = [j,currentLevel[i][j]-1,i];	
+		    blockToDraw = new Block(blockPosition,tempCeiling,tempWalls);
+		    drawables.push(blockToDraw);
+		    
+	        }
+	    }
+	    for(i=0;i<currentLevel.length;i++){
+	        for(j=0; j<currentLevel[i].length; j++){
+	    	    var blockPosition = [j,currentLevel[i][j]-1,i];	
+		    var tempCeiling = textureList[1];
+		    var tempWalls = textureList[0];
+		    blockToDraw = new Block(blockPosition,tempCeiling,tempWalls);
+		    //drawables.push(blockToDraw);
+	        }
+	    }
+	}
+	levelBMP.src = "image.bmp";
+    }
+
+    var levelLoader;
 
     function webGLStart() {
-        var canvas = document.getElementById("warmup-canvas");
-        initGL(canvas);
+        var GLCanvas = document.getElementById("game-canvas");
+	var bitmapCanvas = document.getElementById("level-canvas");
+	levelLoader =bitmapCanvas.getContext("2d");	
+	levelLoader.viewportWidth = bitmapCanvas.width;
+	levelLoader.viewportHeight = bitmapCanvas.height;
+	configTextureSchemes();
+        initGL(GLCanvas);
 
         initShaders();
 	loadPlayer();
+	loadBlockModel();
 	initObjects();
-        initTexture();
-        loadWorld();
 
+	initTextures();
+	initTexture();
+
+	loadLevel();
+	drawables.push(player);
+	stopWaiting =0;
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
 
@@ -481,8 +588,10 @@
 
 <body onload="webGLStart();" align="center" bgcolor = "111111">
 
-    <canvas id="warmup-canvas" style="border: none;" width="800" height="600"></canvas>
+    <canvas id="game-canvas" style="border: none;" width="800" height="600"></canvas>
+<br>
 
+    <canvas id="level-canvas" style="border: none;" width="20" height="20"></canvas>
 </body>
 
 </html>
