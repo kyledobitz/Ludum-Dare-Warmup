@@ -21,12 +21,6 @@ textureFileList[6] = "textures/LavaCrystal.png";
 function configTextureSchemes(){
 
     textureSchemes.push(new TexturePixel(
-	0x000000,	//A red pixel in the map bitmap
-	2,		//here is defined as having a granite ceiling
-	3		//and grass set of walls with IDs 0 and 1
-	));
-
-    textureSchemes.push(new TexturePixel(
 	0xFFFF00,	//A red pixel in the map bitmap
 	6,		//and Granite set of walls with IDs 0 and 1
 	0

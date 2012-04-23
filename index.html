@@ -203,7 +203,7 @@
     var circa;
 
 //GLOBAL CONSTANTS
-    var START_POS =[2.0,0.0,18.0];
+    var START_POS =[1.0,0.0,1.0];
     var PLAYER_SPEED = 0.004;
     var PLAYER_ACCEL = 0.0001;
     var PLAYER_FORCE = 1;
@@ -213,7 +213,17 @@
     var CAMERA_PITCH = -45;
 //END GLOBAL
 
+    stageList = new Array();
     function initObjects(){
+	currentStage = 0;
+
+	var newColor = [0.0,0.0,0.0];
+	var newStage = new Stage("ludum18bit",-90,2,10,newColor);
+	stageList.push(newStage);
+	
+	newColor = [0.0,0.0,0.5];
+	newStage = new Stage("ludum1-2",-90,2,20,newColor);
+	stageList.push(newStage);
 
 	circa = new Sphere();
 	circa.direction = [0,0];
@@ -234,8 +244,10 @@
 
 	camera.pitch = CAMERA_PITCH;
 	camera.distance = CAMERA_DISTANCE;
+	
+	//billBoard = new Splash(textureList[3]);
     }
-
+    var billBoard;
 
     function Drawable(){
 	this.texture = null;
@@ -277,9 +289,14 @@
     }
 
     var speed = 0;
+    var spaceBarPressed = 0;
 
     function handleKeys() {
 	
+	if (currentlyPressedKeys[32]){
+	    spaceBarPressed = 1;
+	}else
+	    spaceBarPressed = 0;
         if (currentlyPressedKeys[37] || currentlyPressedKeys[65]) {
             // Left cursor key or A
             circa.vel[0]-=circa.accel;
@@ -339,6 +356,7 @@
     Sphere.prototype.draw = function(){
 	mvPushMatrix();
         mat4.translate(mvMatrix, this.pos);
+        mat4.translate(mvMatrix, [0,this.radius/2,0]);
         mat4.multiply(mvMatrix, this.rotation);
 
 	gl.activeTexture(gl.TEXTURE0);
@@ -419,6 +437,14 @@
         sphereVertexIndexBuffer.itemSize = 1;
         sphereVertexIndexBuffer.numItems = indexData.length;
     }
+    function Splash(thisTexture){
+	this.texture = thisTexture;
+    }
+    Splash.prototype.draw = function() {
+	mvPushMatrix();
+	drawTriangleStrip(this.texture, splashVertexPositionBuffer, splashVertexTextureCoordBuffer, 4);
+	mvPopMatrix();
+    }
 
     function Block(thisPos, thisCeilingTexture, thisWallTexture){
 	this.pos = thisPos;
@@ -434,6 +460,24 @@
 	drawTriangleStrip(this.wallTexture, blockWallVertexPositionBuffer, blockWallVertexTextureCoordBuffer, 10);
 
 	mvPopMatrix();
+    }
+
+    var splashVertexPositionBuffer;
+    var splashVertexTextureCoordBuffer;
+
+    function loadSplash(){
+	var vertexCount = 4;
+	var vertexPositions = [0,0,1,0,0,1,1,1,];
+	var vertexTextureCoords = [0,0,1,0,0,1,1,1];
+        splashVertexPositionBuffer = gl.createBuffer();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, splashVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositions), gl.STATIC_DRAW);
+
+        splashVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, splashVertexTextureCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexTextureCoords), gl.STATIC_DRAW);
+
     }
     function loadBlockModel(){
 	var wallVertexCount=10;
@@ -558,16 +602,26 @@
 	    }
         }
         lastTime = timeNow;
+	if(circa.pos[0]>stageList[currentStage].boundary){
+	    currentStage++;
+	    var newStage = stageList[currentStage];
+	    camera.distance = newStage.cameraDistance;
+	    circa.vel = [0,0,0];
+	    newBGColor = stageList[currentStage].backGroundColor;
+            gl.clearColor(newBGColor[0],newBGColor[1] ,newBGColor[2] ,1.0);
+	}
     }
 
+    var currentStage = 0;
     var loopFinishTime = 0;
 
     function loopAudio(){
 	thistime = new Date();
 	currentTime = thistime.getTime();
 	if(loopFinishTime<currentTime){
-	    play_multi_sound("ludum2-1");
-	    loopFinishTime = thistime.getTime() + document.getElementById("ludum2-1").duration * 1000;
+	    var currentBGM = stageList[currentStage].backGroundMusic;
+	    play_multi_sound(currentBGM);
+	    loopFinishTime = thistime.getTime() + document.getElementById(currentBGM).duration * 1000;
 	}
     }
 
@@ -610,11 +664,15 @@
 
     function loadLevel(){
 	levelBMP = new Image();
+	currentLevel = new Array();
+	drawables = new Array();
+	drawables.push(circa);
 	levelBMP.onload = function () {
 	    levelLoader.drawImage(levelBMP, 0, 0);
 	    readBMP();
     	    for(i=0; i<pixel.length;i++){
 	        for(j=0; j<pixel[i].length; j++){
+		    rgb = pixel[i][j];
 		    var tempCeiling = textureList[0];
 		    var tempWalls = textureList[0];
 		    var defaultScheme = textureSchemes[0];
@@ -622,7 +680,6 @@
 		    var tempWalls = textureList[defaultScheme.wallTexture];
 		    for(k=0; k<textureSchemes.length; k++){
 			thisScheme = textureSchemes[k];
-			rgb = pixel[i][j];
 			if( thisScheme.color == rgb){
 			    tempCeiling=textureList[thisScheme.ceilingTexture]
 			    tempWalls=textureList[thisScheme.wallTexture]
@@ -630,15 +687,23 @@
 		    }
 	    	    var blockPosition = [j,currentLevel[i][j]-1,i];	
 		    blockToDraw = new Block(blockPosition,tempCeiling,tempWalls);
-		    drawables.push(blockToDraw);
+		    if(rgb != 0xffffff)
+		        drawables.push(blockToDraw);
 		    
 	        }
 	    }
 	}
 	levelBMP.src = "lavaPit.bmp";
     }
+    function Stage(music,pitch,distance,boundary,backColor){
+	this.backGroundMusic=music;
+	this.cameraPitch = pitch;
+	this.cameraDistance = distance;
+	this.boundary = boundary;
+	this.backGroundColor = backColor;
+    }
 
-    var levelLoader;
+    var splashContext;
 
     function webGLStart() {
         var GLCanvas = document.getElementById("game-canvas");
@@ -652,11 +717,13 @@
         initShaders();
 	loadBlockModel();
 	loadSphereModel();
+	loadSplash();
 	initObjects();
 
 	initTextures();
 
 	loadLevel();
+	loadSplash();
 	drawables.push(circa);
 	stopWaiting =0;
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -665,7 +732,7 @@
         document.onkeydown = handleKeyDown;
         document.onkeyup = handleKeyUp;
 
-        tick();
+	tick();
     }
 
         var channel_max = 10;
@@ -694,7 +761,7 @@
 <body onload="webGLStart();" align="center" bgcolor = "111111">
 
 <audio id="ludum1a" src="audio/ludum1a.mp3" preload = "auto"></audio>
-<audio id="ludum18bit" src="audio/ludum18bit.mp3" preload = "auto"></audio>
+<audio id="ludum18bit" src="audio/ludum18bit.wav" preload = "auto"></audio>
 <audio id="ludum1-2" src="audio/ludum1-2.mp3" preload = "auto"></audio>
 <audio id="ludum2-1" src="audio/ludum2-1.mp3" preload = "auto"></audio>
 
