@@ -477,9 +477,9 @@
             if (player.vel[2] != 0) {
 		intendedPosz =player.pos[2] + player.vel[2] * elapsed;
             }
-	    if(currentLevel.length>intendedPosx){
-	        if (currentLevel[Math.floor(intendedPosx)][
-	    		         Math.floor(intendedPosz)] != 1)
+	    if(currentLevel.length>0){
+	        if (currentLevel[Math.floor(intendedPosz)][
+	    		         Math.floor(intendedPosx)] != 1)
 		player.pos = [intendedPosx,0,intendedPosz];
 	    }else
                 player.pos = [intendedPosx,0,intendedPosz];
@@ -487,11 +487,22 @@
         lastTime = timeNow;
     }
 
+    var loopFinishTime = 0;
+
+    function loopAudio(){
+	thistime = new Date();
+	currentTime = thistime.getTime();
+	if(loopFinishTime<currentTime){
+	    play_multi_sound("ludum2-1");
+	    loopFinishTime = thistime.getTime() + document.getElementById("ludum2-1").duration * 1000;
+	}
+    }
 
     function tick() {
         handleKeys();
         animate();
         drawScene();
+	loopAudio();
         requestAnimFrame(tick);
     }
 
@@ -594,16 +605,35 @@
         tick();
     }
 
+        var channel_max = 10;
+        audiochannels = new Array();
+	for (a=0;a<channel_max;a++) {
+		audiochannels[a] = new Array();
+		audiochannels[a]['channel'] = new Audio();
+		audiochannels[a]['finished'] = -1;
+	}
+	function play_multi_sound(s) {
+		for (a=0;a<audiochannels.length;a++) {
+			thistime = new Date();
+			if (audiochannels[a]['finished'] < thistime.getTime()) {			// is this channel finished?
+				audiochannels[a]['finished'] = thistime.getTime() + document.getElementById(s).duration*1000;
+				audiochannels[a]['channel'].src = document.getElementById(s).src;
+				audiochannels[a]['channel'].load();
+				audiochannels[a]['channel'].play();
+				break;
+			}
+		}
+	}
 </script>
 
 </head>
 
 <body onload="webGLStart();" align="center" bgcolor = "111111">
 
-<audio controls="controls">
-  <source src="audio/ludum1a.mp3" type="audio/mpeg" />
-  Your browser does not support the audio element.
-</audio>
+<audio id="ludum1a" src="audio/ludum1a.mp3" preload = "auto"></audio>
+<audio id="ludum18bit" src="audio/ludum18bit.mp3" preload = "auto"></audio>
+<audio id="ludum1-2" src="audio/ludum1-2.mp3" preload = "auto"></audio>
+<audio id="ludum2-1" src="audio/ludum2-1.mp3" preload = "auto"></audio>
 
     <canvas id="game-canvas" style="border: none;" width="800" height="600"></canvas>
 <br>
