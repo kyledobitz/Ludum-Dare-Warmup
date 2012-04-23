@@ -158,19 +158,6 @@
         }
     }
 
-    function initTexture() {
-
-        var playerTexture = gl.createTexture();
-        playerTexture.image = new Image();
-        playerTexture.image.onload = function () {
-            handleLoadedTexture(playerTexture)
-        }
-
-        playerTexture.image.src = "MarioSprite.png";
-	player.texture = playerTexture;
-
-    }
-
     var mvMatrix = mat4.create();
     var mvMatrixStack = [];
     var pMatrix = mat4.create();
@@ -213,31 +200,40 @@
     }
 
     var camera;
-    var player;
+    var circa;
 
 //GLOBAL CONSTANTS
     var START_POS =[2.0,0.0,18.0];
-    var PLAYER_SPEED = 0.002;
-    var PLAYER_HEIGHT = 0.75;
+    var PLAYER_SPEED = 0.004;
+    var PLAYER_ACCEL = 0.0001;
+    var PLAYER_FORCE = 1;
+    var PLAYER_FRICTION =1;
+    var PLAYER_MASS = 1;
     var CAMERA_DISTANCE = 6;
     var CAMERA_PITCH = -45;
 //END GLOBAL
 
     function initObjects(){
 
-	player = new Character();
+	circa = new Sphere();
+	circa.direction = [0,0];
 
-	player.height = PLAYER_HEIGHT;
-	player.pos = START_POS;
-	player.speed = PLAYER_SPEED;
-	player.vertexPositionBuffer = gl.createBuffer();
-	player.texture = null;
+	circa.pos = START_POS;
+	circa.texture = textureList[0];
+	circa.rotation = mat4.create();
+	mat4.identity(circa.rotation);
+	circa.radius = 0.5;
+	circa.speed = PLAYER_SPEED;
+	circa.accel = PLAYER_ACCEL;
+	circa.vel = [0,0,0];
+	circa.force = PLAYER_FORCE;
+	circa.friction = PLAYER_FRICTION;
+	circa.mass = PLAYER_MASS;
 
 	camera = new Camera();
 
 	camera.pitch = CAMERA_PITCH;
 	camera.distance = CAMERA_DISTANCE;
-	camera.pos = player.pos;
     }
 
 
@@ -250,28 +246,6 @@
 	this.numItems = 0;
     }
 
-    function Character(){
-        this.speed = PLAYER_SPEED;
-	this.pos = vec3;
-	this.pos = [0,0,0];
-	this.vel = vec3;
-	this.vel = [0,0,0];
-    }
-
-    Character.prototype.draw = function() {
-
-	mvPushMatrix();
-
-        mat4.translate(mvMatrix, player.pos);
-	mat4.translate(mvMatrix,[0,player.height/2,0]);
-	mat4.scale(mvMatrix,[player.height/2,player.height/2,player.height/2]);
-	drawTriangleStrip(player.texture,playerVertexPositionBuffer,playerVertexTextureCoordBuffer, playerVertexPositionBuffer.numItems);
-	mat4.rotate(mvMatrix,degToRad(camera.pitch),[1,0,0]);
-
-	mvPopMatrix();
-
-    }
-	
     function drawTriangleStrip(myTexture, myVertexPositionBuffer, myTextureCoordBuffer, numItems){
 
         gl.activeTexture(gl.TEXTURE0);
@@ -308,37 +282,143 @@
 	
         if (currentlyPressedKeys[37] || currentlyPressedKeys[65]) {
             // Left cursor key or A
-            player.vel[0]=-player.speed;
+            circa.vel[0]-=circa.accel;
         } else if (currentlyPressedKeys[39] || currentlyPressedKeys[68]) {
             // Right cursor key or D
-            player.vel[0]=player.speed;
+            circa.vel[0]+=circa.accel;
         } else {
-            player.vel[0]=0;
+            circa.vel[0]=0.99*circa.vel[0];
         }
 
         if (currentlyPressedKeys[38] || currentlyPressedKeys[87]) {
             // Up cursor key or W
-            player.vel[2]=-player.speed;
+            circa.vel[2]-=circa.accel;
         } else if (currentlyPressedKeys[40] || currentlyPressedKeys[83]) {
             // Down cursor key
-            player.vel[2]=player.speed;
+            circa.vel[2]+=circa.accel;
         } else {
-            player.vel[2]=0;
+            circa.vel[2]=0.99*circa.vel[2];
         }
+	if(circa.vel[0] > circa.maxVel)
+	    circa.vel[0] = circa.maxVel;
+	if(circa.vel[0] < -circa.maxVel)
+	    circa.vel[0] = -circa.maxVel;
+	if(circa.vel[2] > circa.maxVel)
+	    circa.vel[2] = circa.maxVel;
+	if(circa.vel[2] < -circa.maxVel)
+	    circa.vel[2] = circa.maxVel;
 
     }
 
     var worldVertexPositionBuffer = null;
     var worldVertexTextureCoordBuffer = null;
 
-    var playerVertextPositionBuffer = null;
-    var playerVertextTextureCoordBuffer =null;
-
     var blockWallVertexPositionBuffer = null;
     var blockWallVertextTextureCoordBuffer =null;
 
     var blockCeilingVertexPositionBuffer = null;
     var blockCeilingVertextTextureCoordBuffer =null;
+
+    var sphereVertexPositionBuffer = null;
+    var sphereVertexTextureCoordBuffer = null;
+    var sphereVertexIndexBuffer = null;
+
+    function Sphere(thisPos, thisRadius, thisSurfaceTexture, thisRotation){
+	this.maxVel = 3;
+	this.force =0.001;
+	this.friction = 0.0003;
+	this.speed = 0;
+	this.accel = 0.001;
+	this.mass = 1;
+	this.vel = [0,0];
+	this.pos = thisPos;
+	this.radius = thisRadius;
+	this.surfaceTexture = thisSurfaceTexture;
+	this.rotation = thisRotation;
+    }
+    Sphere.prototype.draw = function(){
+	mvPushMatrix();
+        mat4.translate(mvMatrix, this.pos);
+        mat4.multiply(mvMatrix, this.rotation);
+
+	gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textureList[0]);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER,sphereVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, sphereVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, sphereVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, sphereVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        
+	mvPopMatrix();
+    }
+    function loadSphereModel(){
+	var latitudeBands = 20;
+	var longitudeBands = 20;
+	var radius = 0.33;
+
+	var vertexPositionData = [];
+	var textureCoordData = [];
+	for (var latNumber = 0; latNumber <= latitudeBands; latNumber++) {
+            var theta = latNumber * Math.PI / latitudeBands;
+            var sinTheta = Math.sin(theta);
+            var cosTheta = Math.cos(theta);
+
+            for (var longNumber = 0; longNumber <= longitudeBands; longNumber++) {
+            var phi = longNumber * 2 * Math.PI / longitudeBands;
+            var sinPhi = Math.sin(phi);
+            var cosPhi = Math.cos(phi);
+
+            var x = cosPhi * sinTheta;
+            var y = cosTheta;
+            var z = sinPhi * sinTheta;
+            var u = 1 - (longNumber / longitudeBands);
+            var v = 1 - (latNumber / latitudeBands);
+
+            textureCoordData.push(u);
+            textureCoordData.push(v);
+            vertexPositionData.push(radius * x);
+            vertexPositionData.push(radius * y);
+            vertexPositionData.push(radius * z);
+            }
+        }
+	var indexData = [];
+        for (var latNumber = 0; latNumber < latitudeBands; latNumber++) {
+            for (var longNumber = 0; longNumber < longitudeBands; longNumber++) {
+                var first = (latNumber * (longitudeBands + 1)) + longNumber;
+                var second = first + longitudeBands + 1;
+                indexData.push(first);
+                indexData.push(second);
+                indexData.push(first + 1);
+
+                indexData.push(second);
+                indexData.push(second + 1);
+                indexData.push(first + 1);
+            }
+        }
+        sphereVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexTextureCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordData), gl.STATIC_DRAW);
+        sphereVertexTextureCoordBuffer.itemSize = 2;
+        sphereVertexTextureCoordBuffer.numItems = textureCoordData.length / 2;
+
+        sphereVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sphereVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+        sphereVertexPositionBuffer.itemSize = 3;
+        sphereVertexPositionBuffer.numItems = vertexPositionData.length / 3;
+
+        sphereVertexIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereVertexIndexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STATIC_DRAW);
+        sphereVertexIndexBuffer.itemSize = 1;
+        sphereVertexIndexBuffer.numItems = indexData.length;
+    }
 
     function Block(thisPos, thisCeilingTexture, thisWallTexture){
 	this.pos = thisPos;
@@ -355,7 +435,6 @@
 
 	mvPopMatrix();
     }
-
     function loadBlockModel(){
 	var wallVertexCount=10;
 	var wallVertexPositions = [
@@ -408,34 +487,6 @@
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ceilingVertexTextureCoords), gl.STATIC_DRAW);
     }
    
-    function loadPlayer(){
-	var vertexCount=4;
-	var vertexPositions = [
-	    1.0, 1.0, 0.0, 
-	   -1.0, 1.0, 0.0,
-	    1.0,-1.0, 0.0,
-	   -1.0,-1.0, 0.0,
-	];
-	var vertexTextureCoords = [
-	    1.0, 1.0,
-            0.0, 1.0,
-            1.0, 0.0,
-            0.0, 0.0];
-	
-        playerVertexPositionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexPositionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositions), gl.STATIC_DRAW);
-        playerVertexPositionBuffer.itemSize = 3;
-        playerVertexPositionBuffer.numItems = vertexCount;
-
-        playerVertexTextureCoordBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, playerVertexTextureCoordBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexTextureCoords), gl.STATIC_DRAW);
-        playerVertexTextureCoordBuffer.itemSize = 2;
-        playerVertexTextureCoordBuffer.numItems = vertexCount;
-
-    }
-
     function drawScene() {
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -443,14 +494,12 @@
         mat4.perspective(55, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
 
         mat4.identity(mvMatrix);
-	//Camera is pitched a distance behind the player's head
 
         mat4.translate(mvMatrix, [0, 0, -camera.distance]);
         mat4.rotate(mvMatrix, degToRad(-camera.pitch), [1, 0, 0]);
-        mat4.translate(mvMatrix, [0, -player.height/2, 0]);
 
 	//the player is a ways away from the origin
-        mat4.translate(mvMatrix, [-player.pos[0], -player.pos[1], -player.pos[2]]);
+        mat4.translate(mvMatrix, [-circa.pos[0], -circa.pos[1], -circa.pos[2]]);
         gl.uniform1i(shaderProgram.samplerUniform, 0);
 
 	//draw Blocks
@@ -468,21 +517,45 @@
     function animate() {
         var timeNow = new Date().getTime();
         if (lastTime != 0) {
+	    //update acceleration
             var elapsed = timeNow - lastTime;
-	    var intendedPosx = player.pos[0];
-	    var intendedPosz = player.pos[2];
-            if (player.vel[0] != 0) {
-		intendedPosx =player.pos[0] + player.vel[0] * elapsed;
+	    var intendedPosx = circa.pos[0];
+	    var intendedPosz = circa.pos[2];
+            if (circa.vel[0] != 0) {
+		intendedPosx =circa.pos[0] + circa.vel[0] * elapsed;
             }
-            if (player.vel[2] != 0) {
-		intendedPosz =player.pos[2] + player.vel[2] * elapsed;
+            if (circa.vel[2] != 0) {
+		intendedPosz =circa.pos[2] + circa.vel[2] * elapsed;
             }
 	    if(currentLevel.length>0){
+		var actualMovex = circa.pos[0]; 
+		var actualMovez = circa.pos[2]; 
 	        if (currentLevel[Math.floor(intendedPosz)][
-	    		         Math.floor(intendedPosx)] != 1)
-		player.pos = [intendedPosx,0,intendedPosz];
-	    }else
-                player.pos = [intendedPosx,0,intendedPosz];
+	    		         Math.floor(intendedPosx)] != 1){
+		    actualMovex = intendedPosx;
+		    actualMovez = intendedPosz;
+		}else
+	        if (currentLevel[Math.floor(intendedPosz)][
+	    		         Math.floor(circa.pos[0])] != 1){
+		    actualMovez = intendedPosz;
+		    circa.vel[0] = -circa.vel[0]*.5;
+		}else
+	        if (currentLevel[Math.floor(circa.pos[2])][
+	    		         Math.floor(intendedPosx)] != 1){
+		    actualMovex = intendedPosx;
+		    circa.vel[2] = -circa.vel[2]*.5;
+		}
+		var deltax = actualMovex - circa.pos[0];
+		var deltaz = actualMovez - circa.pos[2];
+		var radsRotated = Math.abs(circa.vel[0] + circa.vel[2])* elapsed/circa.radius;
+		var newRotation = mat4.create();
+		mat4.identity(newRotation);
+		mat4.rotate(newRotation,radsRotated,
+			[deltaz,0,-deltax]);
+		mat4.multiply(newRotation, circa.rotation, circa.rotation);
+		circa.pos = [actualMovex,0,actualMovez];
+		
+	    }
         }
         lastTime = timeNow;
     }
@@ -561,15 +634,6 @@
 		    
 	        }
 	    }
-	    for(i=0;i<currentLevel.length;i++){
-	        for(j=0; j<currentLevel[i].length; j++){
-	    	    var blockPosition = [j,currentLevel[i][j]-1,i];	
-		    var tempCeiling = textureList[1];
-		    var tempWalls = textureList[0];
-		    blockToDraw = new Block(blockPosition,tempCeiling,tempWalls);
-		    //drawables.push(blockToDraw);
-	        }
-	    }
 	}
 	levelBMP.src = "lavaPit.bmp";
     }
@@ -586,15 +650,14 @@
         initGL(GLCanvas);
 
         initShaders();
-	loadPlayer();
 	loadBlockModel();
+	loadSphereModel();
 	initObjects();
 
 	initTextures();
-	initTexture();
 
 	loadLevel();
-	drawables.push(player);
+	drawables.push(circa);
 	stopWaiting =0;
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.enable(gl.DEPTH_TEST);
