@@ -10,8 +10,8 @@ textureSchemes = new Array();
 
 //==================This is where you set up your texture schemes=========
 
-textureFileList[0] = "textures/Granite.png"; //First you state your files and 
-textureFileList[1] = "textures/Grass.png";   //Associate them with an ID number
+textureFileList[0] = "textures/properTitle.png"; //First you state your files and 
+textureFileList[1] = "textures/properCredits.png";   //Associate them with an ID number
 textureFileList[2] = "textures/CaveChips.png";
 textureFileList[3] = "textures/CaveGlass.png";
 textureFileList[4] = "textures/CaveGround.png";
@@ -23,7 +23,7 @@ function configTextureSchemes(){
     textureSchemes.push(new TexturePixel(
 	0xFFFF00,	//A red pixel in the map bitmap
 	6,		//and Granite set of walls with IDs 0 and 1
-	0
+	2
 	));
 
     textureSchemes.push(new TexturePixel(

@@ -217,19 +217,56 @@
     function initObjects(){
 	currentStage = 0;
 
-	var newColor = [0.0,0.0,0.0];
-	var newStage = new Stage("ludum18bit",-90,2,10,newColor);
+	var newStage = new Stage();
+	newStage.backGroundMusic = "ludum1-2";
+	newStage.cameraPitch = -45;
+	newStage.cameraDistance = 4;
+	newStage.boundary = 0;
+	newStage.backGroundColor = [0.0,0.0,0.0];
+	newStage.splash = 0;
 	stageList.push(newStage);
-	
-	newColor = [0.0,0.0,0.5];
-	newStage = new Stage("ludum1-2",-90,2,20,newColor);
+
+	var newStage = new Stage();
+	newStage.backGroundMusic = "ludum1-2";
+	newStage.cameraPitch = -45;
+	newStage.cameraDistance = 4;
+	newStage.boundary = 18;
+	newStage.backGroundColor = [0.0,0.0,0.0];
+	newStage.splash = 0;
+	stageList.push(newStage);
+
+	var newStage = new Stage();
+	newStage.backGroundMusic = "ludum2-1";
+	newStage.cameraPitch = -45;
+	newStage.cameraDistance = 4;
+	newStage.boundary = 25;
+	newStage.backGroundColor = [0.0,0.0,0.0];
+	newStage.splash = 1;
+	stageList.push(newStage);
+
+	var newStage = new Stage();
+	newStage.backGroundMusic = "ludum1-2";
+	newStage.cameraPitch = -45;
+	newStage.cameraDistance = 6;
+	newStage.boundary = 15;
+	newStage.backGroundColor = [0.3,0.3,0.3];
+	newStage.splash = 3;
+	stageList.push(newStage);
+
+	var newStage = new Stage();
+	newStage.backGroundMusic = "ludum2-1";
+	newStage.cameraPitch = -45;
+	newStage.cameraDistance = 7;
+	newStage.boundary = 30;
+	newStage.backGroundColor = [0.3,0.5,0.7];
+	newStage.splash = 4;
 	stageList.push(newStage);
 
 	circa = new Sphere();
 	circa.direction = [0,0];
 
 	circa.pos = START_POS;
-	circa.texture = textureList[0];
+	circa.texture = textureList[2];
 	circa.rotation = mat4.create();
 	mat4.identity(circa.rotation);
 	circa.radius = 0.5;
@@ -245,7 +282,7 @@
 	camera.pitch = CAMERA_PITCH;
 	camera.distance = CAMERA_DISTANCE;
 	
-	//billBoard = new Splash(textureList[3]);
+	billBoard = new Splash(0);
     }
     var billBoard;
 
@@ -295,6 +332,7 @@
 	
 	if (currentlyPressedKeys[32]){
 	    spaceBarPressed = 1;
+	    loaded = 1;
 	}else
 	    spaceBarPressed = 0;
         if (currentlyPressedKeys[37] || currentlyPressedKeys[65]) {
@@ -438,11 +476,18 @@
         sphereVertexIndexBuffer.numItems = indexData.length;
     }
     function Splash(thisTexture){
-	this.texture = thisTexture;
+	this.textureNumber = thisTexture;
     }
     Splash.prototype.draw = function() {
 	mvPushMatrix();
-	drawTriangleStrip(this.texture, splashVertexPositionBuffer, splashVertexTextureCoordBuffer, 4);
+	
+	mat4.identity(mvMatrix);
+	var stretch = [4/3,1.0,1.0];
+	mat4.scale(mvMatrix,stretch);
+	mat4.translate(mvMatrix,[-0.5,-0.5,-1]);
+	gl.disable(gl.DEPTH_TEST);
+	drawTriangleStrip(textureList[this.textureNumber], splashVertexPositionBuffer, splashVertexTextureCoordBuffer, 4);
+	gl.enable(gl.DEPTH_TEST);
 	mvPopMatrix();
     }
 
@@ -467,8 +512,15 @@
 
     function loadSplash(){
 	var vertexCount = 4;
-	var vertexPositions = [0,0,1,0,0,1,1,1,];
-	var vertexTextureCoords = [0,0,1,0,0,1,1,1];
+	var vertexPositions = [
+	0,0,0,1,0,0,0,1,0,1,1,0
+	];
+	var vertexTextureCoords = [
+	    0.0, 0.0,
+            1.0, 0.0,
+            0.0, 1.0,
+	    1.0, 1.0,
+	];
         splashVertexPositionBuffer = gl.createBuffer();
 
         gl.bindBuffer(gl.ARRAY_BUFFER, splashVertexPositionBuffer);
@@ -552,15 +604,20 @@
 	    var thingToDraw = drawables[i];
 	    thingToDraw.draw();
         }
+	
+	if(splashWaitTime>currentTime){
+	    billBoard.draw();
+	}
 
 
     }
 
+    splashWaitTime = 0;
     var lastTime = 0;
 
     function animate() {
         var timeNow = new Date().getTime();
-        if (lastTime != 0) {
+        if (lastTime != 0 && splashWaitTime<currentTime) {
 	    //update acceleration
             var elapsed = timeNow - lastTime;
 	    var intendedPosx = circa.pos[0];
@@ -605,10 +662,13 @@
 	if(circa.pos[0]>stageList[currentStage].boundary){
 	    currentStage++;
 	    var newStage = stageList[currentStage];
+	    camera.pitch = newStage.cameraPitch;
 	    camera.distance = newStage.cameraDistance;
 	    circa.vel = [0,0,0];
 	    newBGColor = stageList[currentStage].backGroundColor;
             gl.clearColor(newBGColor[0],newBGColor[1] ,newBGColor[2] ,1.0);
+	    billBoard = new Splash(newStage.splash);
+	    splashWaitTime = currentTime + 4000;
 	}
     }
 
@@ -616,20 +676,23 @@
     var loopFinishTime = 0;
 
     function loopAudio(){
-	thistime = new Date();
-	currentTime = thistime.getTime();
 	if(loopFinishTime<currentTime){
 	    var currentBGM = stageList[currentStage].backGroundMusic;
 	    play_multi_sound(currentBGM);
-	    loopFinishTime = thistime.getTime() + document.getElementById(currentBGM).duration * 1000;
+	    loopFinishTime = currentTime + document.getElementById(currentBGM).duration * 1000;
 	}
     }
+    var currentTime;
 
+    var loaded = 0;
+    var loadFinishTime = 0;
     function tick() {
+	thistime = new Date();
+	currentTime = thistime.getTime();
         handleKeys();
         animate();
-        drawScene();
 	loopAudio();
+        drawScene();
         requestAnimFrame(tick);
     }
 
@@ -687,7 +750,7 @@
 		    }
 	    	    var blockPosition = [j,currentLevel[i][j]-1,i];	
 		    blockToDraw = new Block(blockPosition,tempCeiling,tempWalls);
-		    if(rgb != 0xffffff)
+		    //if(rgb != 0xffffff)
 		        drawables.push(blockToDraw);
 		    
 	        }
@@ -701,6 +764,7 @@
 	this.cameraDistance = distance;
 	this.boundary = boundary;
 	this.backGroundColor = backColor;
+	this.splash = 0;
     }
 
     var splashContext;
@@ -731,7 +795,9 @@
 
         document.onkeydown = handleKeyDown;
         document.onkeyup = handleKeyUp;
-
+	thistime = new Date();
+	currentTime = thistime.getTime();
+	loadFinishTime = currentTime + 6000;
 	tick();
     }
 
@@ -768,6 +834,22 @@
     <canvas id="game-canvas" style="border: none;" width="800" height="600"></canvas>
 <br>
 
+<p style = "align:center;color:white">
+Circa eighty-seven I was a primitive<br>
+a speck in a mighty small world<br>
+<br>
+By '94, a game-gloved kid after everything-everything more<br>
+As for girls and 1998, I'd be an angsty anxious maybe at a me sized angle<br>
+<br>
+Scorned in fact by twenty-hundred and i was rejection entire <br>
+An effort to define. I thought I'd strike-out while the iron's hot!<br>
+<br>
+therefore revision and twenty-ten are synonomous<br>
+Course that was all foolhardy, Older now in 2k12 a reverse Haiku<br>
+<br>
+a river of worlds of repeats<br>
+a river<br>
+Time is the river and I am the stone<br>
     <canvas id="level-canvas" style="border: none;" width="20" height="20"></canvas>
 </body>
 
